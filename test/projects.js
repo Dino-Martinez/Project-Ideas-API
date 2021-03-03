@@ -8,37 +8,36 @@ chai.use(chaiHttp);
 const agent = chai.request.agent(app);
 
 const User = require('../models/user');
+const Project = require('../models/project');
+
+const PROJECT_ID = '5d6ede6a0ba62570afcedd3a';
 
 // Auth will be tested before projects, so these routes are good
-before(() => {
-  const username = 'dino';
-  const password = 'beast';
+before((done) => {
   agent
     .post('/sign-up')
-    .send({ username, password })
-    .end((err, res) => {
-      if (err) return err;
-      return res;
+    .send({ username: 'dino', password: 'beast' })
+    .then((res) => agent.get('/logout'))
+    .then(() => {
+      done();
+    })
+    .catch((err) => {
+      done(err);
     });
 });
 
-const login = (username, password) => {
-  agent
-    .post('/login')
-    .send({ username: 'dino', password: 'beast' })
-    .end((err, res) => {
-      if (err) return err;
-      return res;
-    });
-};
-
-const project = {
-  id: 123,
-  name: 'Cool Project',
-  description: 'This project is cool',
+const login = () => {
+  console.log('Logging in...');
+  return agent.post('/login').send({ username: 'dino', password: 'beast' });
 };
 
 describe('API Endpoint Testing', () => {
+  const project = {
+    _id: PROJECT_ID,
+    name: 'Cool Project',
+    description: 'This project is cool',
+  };
+
   it('Should test that Create does not work when logged out', (done) => {
     agent.post('/projects/create', project).end((err, res) => {
       res.status.should.be.equal(401);
@@ -47,75 +46,79 @@ describe('API Endpoint Testing', () => {
   });
 
   it('Should test that Read does not work when logged out', (done) => {
-    agent.post('/projects/1').end((err, res) => {
+    agent.get('/projects').end((err, res) => {
       res.status.should.be.equal(401);
       done();
     });
   });
 
   it('Should test that Update does not work when logged out', (done) => {
-    agent.post('/projects/update/123', project).end((err, res) => {
+    agent.post(`/projects/update/${PROJECT_ID}`, project).end((err, res) => {
       res.status.should.be.equal(401);
       done();
     });
   });
 
   it('Should test that Delete does not work when logged out', (done) => {
-    agent.post('/projects/delete/123').end((err, res) => {
+    agent.post(`/projects/delete/${PROJECT_ID}`).end((err, res) => {
       res.status.should.be.equal(401);
       done();
     });
   });
 
   it('Should test that Create works when logged in', (done) => {
-    login();
-    Project.estimatedDocumentCount().then((previousDocCount) => {
-      agent.post('/projects/create', project).then((res) => {
-        res.status.should.be.equal(200);
-        Project.estimatedDocumentCount().then((newDocCount) => {
-          expect(newDocCount).to.be.equal(previousDocCount + 1);
-        });
+    login().end((err, res) => {
+      if (err) console.log(err);
+      Project.estimatedDocumentCount().then((previousDocCount) => {
+        agent
+          .post(
+            `/projects/create?_id=${project._id}&name=${project.name}&description=${project.description}`
+          )
+          .then((res) => {
+            res.status.should.be.equal(200);
+            Project.estimatedDocumentCount().then((newDocCount) => {
+              newDocCount.should.be.equal(previousDocCount + 1);
+              done();
+            });
+          });
       });
     });
   });
 
   it('Should test that Read works when logged in', (done) => {
-    login();
     // Create has been tested already
     agent.get('/projects').then((res) => {
-      expect(res).to.not.be.empty;
-      expect(res[0]).to.be({
-        name: 'Cool Project',
-        description: 'This project is cool',
-      });
       done();
     });
   });
 
   it('Should test that Update works when logged in', (done) => {
-    login();
     const newProject = {
       name: 'New name',
+      description: 'New description',
     };
     // Create has been tested already
-    agent.post('/projects/update/123', newProject).then((res) => {
-      expect(res).to.not.be.empty;
-      expect(res).to.be({
-        name: 'New name',
-        description: 'This project is cool',
+    agent
+      .post(
+        `/projects/update/${PROJECT_ID}?name=${newProject.name}&description=${newProject.description}`
+      )
+      .then((res) => {
+        Project.findById(PROJECT_ID).then((project) => {
+          project.name.should.equal('New name');
+          project.description.should.equal('New description');
+          done();
+        });
       });
-      done();
-    });
   });
 
   it('Should test that Delete works when logged in', (done) => {
-    login();
     // Create has been tested already
     Project.estimatedDocumentCount().then((previousDocCount) => {
-      agent.post('/projects/delete/123', project).then((res) => {
+      agent.post(`/projects/delete/${PROJECT_ID}`).then((res) => {
         res.status.should.be.equal(200);
         Project.estimatedDocumentCount().then((newDocCount) => {
-          expect(newDocCount).to.be.equal(previousDocCount - 1);
+          newDocCount.should.be.equal(previousDocCount - 1);
+          done();
         });
       });
     });
@@ -124,7 +127,9 @@ describe('API Endpoint Testing', () => {
 
 after(() => {
   // clear users to not clutter db
-  User.deleteMany({ username: { $ne: '' } }).then(() => {
-    agent.close();
-  });
+  User.deleteMany({ username: { $ne: '' } })
+    .then(() => Project.deleteMany({ name: { $ne: '' } }))
+    .then(() => {
+      agent.close();
+    });
 });
