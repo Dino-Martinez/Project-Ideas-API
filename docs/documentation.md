@@ -27,7 +27,7 @@ In order to delete or update a project, you need access to its ID first. To retr
 ### Create a new project
 
 Endpoint:
-`http://api/create_project/<PROJECT_PARAMS>`
+`http://api/projects/create/<PROJECT_PARAMS>`
 
 Result:
 `{success: True}` or `{success: False}`
