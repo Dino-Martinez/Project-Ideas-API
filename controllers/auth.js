@@ -3,7 +3,7 @@ const User = require('../models/user');
 
 module.exports = (app) => {
   app.get('/', (req, res) => {
-    const response = 'Hello';
+    let response = 'Hello';
     if (req.user) {
       response += req.user.username;
     }
@@ -29,8 +29,7 @@ module.exports = (app) => {
   });
 
   app.post('/login', (req, res) => {
-    const { username } = req.body;
-    const { password } = req.body;
+    const { username, password } = req.body;
     // Find this user name
     User.findOne({ username }, 'username password')
       .then((user) => {
